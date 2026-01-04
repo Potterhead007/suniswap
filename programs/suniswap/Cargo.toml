@@ -1,0 +1,29 @@
+[package]
+name = "suniswap"
+version = "0.1.0"
+description = "SuniSwap - Concentrated Liquidity AMM with V4-style Hooks on Solana"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/suniswap/suniswap"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "suniswap"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+bytemuck = { version = "1.14", features = ["derive"] }
+uint = "0.10"
+num-traits = "0.2"
+
+[dev-dependencies]
+proptest = "1.0"
