@@ -3,7 +3,7 @@
 import { FC, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, Droplets, TrendingUp, Wallet } from "lucide-react";
+import { Menu, X, Droplets, TrendingUp, Wallet, History } from "lucide-react";
 import { WalletButton } from "./WalletButton";
 import { NetworkBadge } from "./NetworkBadge";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/", label: "Swap", icon: TrendingUp },
   { href: "/pools", label: "Pools", icon: Droplets },
   { href: "/positions", label: "Positions", icon: Wallet },
+  { href: "/history", label: "History", icon: History },
 ];
 
 export const Header: FC = () => {

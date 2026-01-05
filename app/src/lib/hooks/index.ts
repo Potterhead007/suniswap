@@ -1,8 +1,13 @@
 export { useProgram } from "./useProgram";
-export { usePool, useAllPools, usePoolPrice } from "./usePool";
+export { usePool, useAllPools, usePoolPrice, usePoolByAddress } from "./usePool";
 export type { PoolAccount } from "./usePool";
 export { useUserPositions, usePosition, getPositionPriceRange } from "./usePositions";
 export type { PositionAccount } from "./usePositions";
 export { useTokenBalance, useSolBalance, formatBalance } from "./useTokenBalance";
 export { useSwap, useSwapQuote } from "./useSwap";
 export { useLiquidity } from "./useLiquidity";
+export { useTokenPrices, useSOLPrice, useTokenPrice, useUSDValue } from "./usePrices";
+export { usePoolTVL, usePoolStats, useAllPoolStats } from "./usePoolStats";
+export { useUserTransactionHistory, useProgramTransactions } from "./useTransactionHistory";
+export type { TransactionRecord } from "./useTransactionHistory";
+export { useCreatePool } from "./useCreatePool";

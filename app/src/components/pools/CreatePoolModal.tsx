@@ -1,11 +1,20 @@
 "use client";
 
 import { FC, useState } from "react";
-import { X, ChevronDown, Info, Coins, AlertTriangle } from "lucide-react";
+import { PublicKey } from "@solana/web3.js";
+import { X, ChevronDown, Info, Coins, AlertTriangle, Loader2, CheckCircle } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { FEE_TIERS } from "@/lib/constants";
+import { useCreatePool } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+
+// Token options for selection
+const TOKEN_OPTIONS = [
+  { symbol: "SOL", mint: "So11111111111111111111111111111111111111112" },
+  { symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" },
+  { symbol: "USDT", mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" },
+];
 
 interface CreatePoolModalProps {
   isOpen: boolean;
@@ -15,12 +24,17 @@ interface CreatePoolModalProps {
 export const CreatePoolModal: FC<CreatePoolModalProps> = ({ isOpen, onClose }) => {
   const { connected } = useWallet();
   const { setVisible } = useWalletModal();
+  const { createPool, isCreating: hookCreating } = useCreatePool();
 
   const [tokenA, setTokenA] = useState<string>("");
   const [tokenB, setTokenB] = useState<string>("");
   const [selectedFeeRate, setSelectedFeeRate] = useState(3000);
   const [initialPrice, setInitialPrice] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showTokenSelectA, setShowTokenSelectA] = useState(false);
+  const [showTokenSelectB, setShowTokenSelectB] = useState(false);
 
   if (!isOpen) return null;
 
@@ -32,13 +46,43 @@ export const CreatePoolModal: FC<CreatePoolModalProps> = ({ isOpen, onClose }) =
       return;
     }
 
+    // Get token mints
+    const tokenAOption = TOKEN_OPTIONS.find((t) => t.symbol === tokenA);
+    const tokenBOption = TOKEN_OPTIONS.find((t) => t.symbol === tokenB);
+
+    if (!tokenAOption || !tokenBOption) {
+      setError("Please select both tokens");
+      return;
+    }
+
+    const price = parseFloat(initialPrice);
+    if (isNaN(price) || price <= 0) {
+      setError("Please enter a valid initial price");
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
     setIsCreating(true);
+
     try {
-      // In a real implementation, you would build and send the create pool transaction
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      onClose();
-    } catch (error) {
-      console.error("Create pool failed:", error);
+      const signature = await createPool({
+        tokenMintA: new PublicKey(tokenAOption.mint),
+        tokenMintB: new PublicKey(tokenBOption.mint),
+        feeRate: selectedFeeRate,
+        initialPrice: price,
+      });
+
+      setSuccess(`Pool created! Tx: ${signature.slice(0, 8)}...`);
+
+      // Close modal after 2 seconds
+      setTimeout(() => {
+        onClose();
+        setSuccess(null);
+      }, 2000);
+    } catch (err) {
+      console.error("Create pool failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to create pool");
     } finally {
       setIsCreating(false);
     }
@@ -68,27 +112,65 @@ export const CreatePoolModal: FC<CreatePoolModalProps> = ({ isOpen, onClose }) =
 
             <div className="grid grid-cols-2 gap-4">
               {/* Token A */}
-              <div>
+              <div className="relative">
                 <label className="text-sm text-muted-foreground mb-1 block">Token A</label>
-                <button className="w-full flex items-center gap-2 p-3 rounded-xl border bg-background hover:bg-accent transition-colors">
+                <button
+                  onClick={() => setShowTokenSelectA(!showTokenSelectA)}
+                  className="w-full flex items-center gap-2 p-3 rounded-xl border bg-background hover:bg-accent transition-colors"
+                >
                   <div className="h-6 w-6 rounded-full bg-gradient-to-br from-primary/50 to-purple-500/50 flex items-center justify-center">
                     <Coins className="h-3 w-3" />
                   </div>
                   <span>{tokenA || "Select"}</span>
                   <ChevronDown className="h-4 w-4 ml-auto" />
                 </button>
+                {showTokenSelectA && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-xl shadow-lg z-20">
+                    {TOKEN_OPTIONS.filter((t) => t.symbol !== tokenB).map((token) => (
+                      <button
+                        key={token.symbol}
+                        onClick={() => {
+                          setTokenA(token.symbol);
+                          setShowTokenSelectA(false);
+                        }}
+                        className="w-full p-3 text-left hover:bg-accent transition-colors first:rounded-t-xl last:rounded-b-xl"
+                      >
+                        {token.symbol}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Token B */}
-              <div>
+              <div className="relative">
                 <label className="text-sm text-muted-foreground mb-1 block">Token B</label>
-                <button className="w-full flex items-center gap-2 p-3 rounded-xl border bg-background hover:bg-accent transition-colors">
+                <button
+                  onClick={() => setShowTokenSelectB(!showTokenSelectB)}
+                  className="w-full flex items-center gap-2 p-3 rounded-xl border bg-background hover:bg-accent transition-colors"
+                >
                   <div className="h-6 w-6 rounded-full bg-gradient-to-br from-blue-500/50 to-cyan-500/50 flex items-center justify-center">
                     <Coins className="h-3 w-3" />
                   </div>
                   <span>{tokenB || "Select"}</span>
                   <ChevronDown className="h-4 w-4 ml-auto" />
                 </button>
+                {showTokenSelectB && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-card border rounded-xl shadow-lg z-20">
+                    {TOKEN_OPTIONS.filter((t) => t.symbol !== tokenA).map((token) => (
+                      <button
+                        key={token.symbol}
+                        onClick={() => {
+                          setTokenB(token.symbol);
+                          setShowTokenSelectB(false);
+                        }}
+                        className="w-full p-3 text-left hover:bg-accent transition-colors first:rounded-t-xl last:rounded-b-xl"
+                      >
+                        {token.symbol}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -176,22 +258,43 @@ export const CreatePoolModal: FC<CreatePoolModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
+          {/* Error Message */}
+          {error && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 text-destructive text-sm">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {success && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-success/10 text-success text-sm">
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              <span>{success}</span>
+            </div>
+          )}
+
           {/* Create Button */}
           <button
             onClick={handleCreate}
-            disabled={!isValid || isCreating}
+            disabled={!isValid || isCreating || hookCreating}
             className={cn(
               "w-full py-4 rounded-xl font-semibold text-lg transition-all",
-              !isValid || isCreating
+              !isValid || isCreating || hookCreating
                 ? "bg-muted text-muted-foreground cursor-not-allowed"
                 : "bg-primary text-primary-foreground hover:bg-primary/90"
             )}
           >
-            {!connected
-              ? "Connect Wallet"
-              : isCreating
-              ? "Creating..."
-              : "Create Pool"}
+            {!connected ? (
+              "Connect Wallet"
+            ) : isCreating || hookCreating ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Creating Pool...
+              </span>
+            ) : (
+              "Create Pool"
+            )}
           </button>
         </div>
       </div>

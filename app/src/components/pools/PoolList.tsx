@@ -3,9 +3,10 @@
 import { FC, useState, useMemo } from "react";
 import { Search, Filter, ArrowUpDown, Plus, Loader2 } from "lucide-react";
 import { PoolCard, PoolData } from "./PoolCard";
-import { useAllPools, PoolAccount } from "@/lib/hooks";
+import { useAllPools, useAllPoolStats, PoolAccount } from "@/lib/hooks";
 import { TOKEN_METADATA } from "@/lib/constants";
 import { sqrtPriceX64ToPrice } from "@/lib/utils/math";
+import { PoolStats } from "@/lib/services/indexerService";
 import { cn } from "@/lib/utils";
 
 // Helper to get token info from mint
@@ -22,7 +23,10 @@ function getTokenInfo(mintAddress: string): { symbol: string; name: string; logo
 }
 
 // Convert PoolAccount to PoolData for display
-function poolAccountToPoolData(pool: PoolAccount): PoolData {
+function poolAccountToPoolData(
+  pool: PoolAccount,
+  stats?: PoolStats
+): PoolData {
   const tokenAInfo = getTokenInfo(pool.tokenMintA.toBase58());
   const tokenBInfo = getTokenInfo(pool.tokenMintB.toBase58());
 
@@ -36,9 +40,9 @@ function poolAccountToPoolData(pool: PoolAccount): PoolData {
     tokenA: tokenAInfo,
     tokenB: tokenBInfo,
     feeRate: pool.feeRate,
-    tvl: 0, // Would need to calculate from on-chain TVL data
-    volume24h: 0, // Would need indexer for historical data
-    apr: 0, // Would need historical fee data
+    tvl: stats?.tvlUSD ?? 0,
+    volume24h: stats?.volume24h ?? 0,
+    apr: stats?.apr ?? 0,
     price,
   };
 }
@@ -52,16 +56,20 @@ interface PoolListProps {
 
 export const PoolList: FC<PoolListProps> = ({ onCreatePool }) => {
   const { data: poolAccounts, isLoading, error } = useAllPools();
+  const { data: poolStats } = useAllPoolStats(poolAccounts);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("tvl");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedFeeRate, setSelectedFeeRate] = useState<number | null>(null);
 
-  // Convert pool accounts to display format
+  // Convert pool accounts to display format with stats
   const allPools = useMemo(() => {
     if (!poolAccounts) return [];
-    return poolAccounts.map(poolAccountToPoolData);
-  }, [poolAccounts]);
+    return poolAccounts.map((pool) => {
+      const stats = poolStats?.get(pool.address.toBase58());
+      return poolAccountToPoolData(pool, stats);
+    });
+  }, [poolAccounts, poolStats]);
 
   const filteredAndSortedPools = useMemo(() => {
     let pools = [...allPools];

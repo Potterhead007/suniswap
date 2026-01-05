@@ -13,6 +13,7 @@ export interface PoolAccount {
   sqrtPriceX64: BN;
   liquidity: BN;
   tickCurrent: number;
+  tickCurrentIndex: number;
   tickSpacing: number;
   feeGrowthGlobalAX128: BN;
   feeGrowthGlobalBX128: BN;
@@ -49,6 +50,7 @@ export function usePool(
           sqrtPriceX64: new BN(poolAccount.sqrtPriceX64.toString()),
           liquidity: new BN(poolAccount.liquidity.toString()),
           tickCurrent: poolAccount.tickCurrent,
+          tickCurrentIndex: poolAccount.tickCurrent,
           tickSpacing: poolAccount.tickSpacing,
           feeGrowthGlobalAX128: new BN(poolAccount.feeGrowthGlobalAX128.toString()),
           feeGrowthGlobalBX128: new BN(poolAccount.feeGrowthGlobalBX128.toString()),
@@ -96,6 +98,7 @@ export function useAllPools() {
             sqrtPriceX64: new BN(account.sqrtPriceX64.toString()),
             liquidity: new BN(account.liquidity.toString()),
             tickCurrent: account.tickCurrent,
+            tickCurrentIndex: account.tickCurrent,
             tickSpacing: account.tickSpacing,
             feeGrowthGlobalAX128: new BN(account.feeGrowthGlobalAX128.toString()),
             feeGrowthGlobalBX128: new BN(account.feeGrowthGlobalBX128.toString()),
@@ -115,6 +118,52 @@ export function useAllPools() {
       }
     },
     staleTime: 30000,
+  });
+}
+
+export function usePoolByAddress(poolAddress?: string) {
+  const { readonlyProgram } = useProgram();
+
+  return useQuery({
+    queryKey: ["pool", poolAddress],
+    queryFn: async (): Promise<PoolAccount | null> => {
+      if (!poolAddress) return null;
+
+      try {
+        const pubkey = new PublicKey(poolAddress);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const poolAccount = await (readonlyProgram.account as any).pool.fetch(pubkey);
+
+        // Find fee rate from fee tier
+        const feeTier = FEE_TIERS.find(
+          (ft) => ft.tickSpacing === poolAccount.tickSpacing
+        );
+
+        return {
+          address: pubkey,
+          sqrtPriceX64: new BN(poolAccount.sqrtPriceX64.toString()),
+          liquidity: new BN(poolAccount.liquidity.toString()),
+          tickCurrent: poolAccount.tickCurrent,
+          tickCurrentIndex: poolAccount.tickCurrent,
+          tickSpacing: poolAccount.tickSpacing,
+          feeGrowthGlobalAX128: new BN(poolAccount.feeGrowthGlobalAX128.toString()),
+          feeGrowthGlobalBX128: new BN(poolAccount.feeGrowthGlobalBX128.toString()),
+          protocolFeesA: new BN(poolAccount.protocolFeesA.toString()),
+          protocolFeesB: new BN(poolAccount.protocolFeesB.toString()),
+          tokenMintA: new PublicKey(poolAccount.tokenMintA),
+          tokenMintB: new PublicKey(poolAccount.tokenMintB),
+          tokenVaultA: new PublicKey(poolAccount.tokenVaultA),
+          tokenVaultB: new PublicKey(poolAccount.tokenVaultB),
+          feeRate: feeTier?.feeRate ?? 3000,
+          isPaused: poolAccount.isPaused !== 0,
+        };
+      } catch (e) {
+        console.error("Failed to fetch pool by address:", e);
+        return null;
+      }
+    },
+    enabled: !!poolAddress,
+    staleTime: 10000,
   });
 }
 
