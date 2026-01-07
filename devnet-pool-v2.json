@@ -1,0 +1,7 @@
+{
+  "poolAddress": "HVC2Fx14SMCyko5e9oTesYBrLrd4xdx7RHEzsLQKHWhY",
+  "tokenA": "2eJCUAkzXv5gAxQaWUk1u7kK4oG7XZ3jB6RrL9xc1buQ",
+  "tokenB": "GdLm7VEXzHZyUQDL8r2TgvTMDSN44wjcrZbu4dme4mue",
+  "feeRate": 500,
+  "tickSpacing": 10
+}

@@ -1,7 +1,17 @@
 import { PublicKey } from "@solana/web3.js";
 
-// Program ID
-export const PROGRAM_ID = new PublicKey("859DmKSfDQxnHY7dbYdFNwUE7QWhnb1WiBbXwbq1ktky");
+// Program IDs per network
+export const PROGRAM_IDS = {
+  localnet: "859DmKSfDQxnHY7dbYdFNwUE7QWhnb1WiBbXwbq1ktky",
+  devnet: "D3mEetFkLuB1sia8Bvvv2nmt9k6RsJPAGR2PE6tj7EFq",
+  mainnet: "D3mEetFkLuB1sia8Bvvv2nmt9k6RsJPAGR2PE6tj7EFq", // Update when deploying to mainnet
+} as const;
+
+// Current network (from environment or default to devnet)
+const CURRENT_NETWORK = (process.env.NEXT_PUBLIC_NETWORK || "devnet") as keyof typeof PROGRAM_IDS;
+
+// Program ID for current network
+export const PROGRAM_ID = new PublicKey(PROGRAM_IDS[CURRENT_NETWORK]);
 
 // Fee tiers (fee rate in hundredths of a bip)
 export const FEE_TIERS = [
@@ -78,4 +88,28 @@ export const TOKEN_METADATA: Record<string, { symbol: string; name: string; deci
     decimals: 6,
     logo: "/tokens/usdt.svg",
   },
+  // Devnet test tokens
+  "2eJCUAkzXv5gAxQaWUk1u7kK4oG7XZ3jB6RrL9xc1buQ": {
+    symbol: "sUSDC",
+    name: "Suniswap USDC (Test)",
+    decimals: 6,
+    logo: "/tokens/usdc.svg",
+  },
+  GdLm7VEXzHZyUQDL8r2TgvTMDSN44wjcrZbu4dme4mue: {
+    symbol: "SUNI",
+    name: "Suniswap Token (Test)",
+    decimals: 9,
+    logo: "/tokens/sol.svg",
+  },
 };
+
+// Known devnet pools
+export const DEVNET_POOLS = [
+  {
+    address: "DFeVu9B1d8qc1APuQ2bks6GHnbbRGz1rZFeT9ruvQjtv",
+    tokenA: "2eJCUAkzXv5gAxQaWUk1u7kK4oG7XZ3jB6RrL9xc1buQ",
+    tokenB: "GdLm7VEXzHZyUQDL8r2TgvTMDSN44wjcrZbu4dme4mue",
+    feeRate: 3000,
+    tickSpacing: 60,
+  },
+] as const;

@@ -1,0 +1,9 @@
+{
+  "poolAddress": "DFeVu9B1d8qc1APuQ2bks6GHnbbRGz1rZFeT9ruvQjtv",
+  "tokenA": "2eJCUAkzXv5gAxQaWUk1u7kK4oG7XZ3jB6RrL9xc1buQ",
+  "tokenB": "GdLm7VEXzHZyUQDL8r2TgvTMDSN44wjcrZbu4dme4mue",
+  "feeRate": 3000,
+  "tickSpacing": 60,
+  "network": "devnet",
+  "createdAt": "2026-01-05T05:41:26.442Z"
+}

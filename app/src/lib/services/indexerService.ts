@@ -179,6 +179,29 @@ export function estimateAPR(
   return dailyReturn * 365 * 100; // Annualized percentage
 }
 
+// Fetch indexed stats from API
+async function fetchIndexedStats(poolAddress: string): Promise<{
+  volume24h: number;
+  fees24h: number;
+  txCount24h: number;
+} | null> {
+  try {
+    const response = await fetch(`/api/pools/${poolAddress}/stats`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data.message === "Indexer not configured") return null;
+
+    return {
+      volume24h: data.volume24h || 0,
+      fees24h: data.fees24h || 0,
+      txCount24h: data.txCount24h || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 // Aggregate pool statistics
 export async function getPoolStats(
   connection: Connection,
@@ -188,7 +211,7 @@ export async function getPoolStats(
   priceA: number,
   priceB: number
 ): Promise<PoolStats> {
-  // Calculate TVL
+  // Calculate TVL from on-chain data
   const tvlUSD = await calculatePoolTVL(
     connection,
     tokenVaultA,
@@ -197,11 +220,26 @@ export async function getPoolStats(
     priceB
   );
 
-  // For a production system, you'd query an indexer for volume/fees
-  // For now, we estimate based on recent transactions
-  const volume24h = tvlUSD * 0.1; // Estimate 10% daily volume
-  const volume7d = volume24h * 6; // 7-day volume
-  const fees24h = volume24h * 0.003; // 0.3% fee
+  // Try to fetch real stats from indexer
+  const indexedStats = await fetchIndexedStats(poolAddress.toBase58());
+
+  let volume24h: number;
+  let fees24h: number;
+  let txCount24h: number;
+
+  if (indexedStats) {
+    // Use real indexed data
+    volume24h = indexedStats.volume24h;
+    fees24h = indexedStats.fees24h;
+    txCount24h = indexedStats.txCount24h;
+  } else {
+    // Fallback to estimates
+    volume24h = tvlUSD * 0.1;
+    fees24h = volume24h * 0.003;
+    txCount24h = 0;
+  }
+
+  const volume7d = volume24h * 6;
   const fees7d = fees24h * 6;
   const apr = estimateAPR(fees24h, tvlUSD);
 
@@ -212,6 +250,60 @@ export async function getPoolStats(
     fees24h,
     fees7d,
     apr,
-    txCount24h: 0, // Would count from indexer
+    txCount24h,
   };
+}
+
+// Fetch global protocol stats
+export async function getGlobalStats(): Promise<{
+  totalPools: number;
+  volume24h: number;
+  txCount24h: number;
+  activePositions: number;
+  uniqueUsers: number;
+  tvlTotal: number;
+} | null> {
+  try {
+    const response = await fetch("/api/stats");
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data.message === "Indexer not configured") return null;
+
+    return {
+      totalPools: data.totalPools || 0,
+      volume24h: data.volume24h || 0,
+      txCount24h: data.txCount24h || 0,
+      activePositions: data.activePositions || 0,
+      uniqueUsers: data.uniqueUsers || 0,
+      tvlTotal: data.tvlTotal || 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Fetch user transactions from indexer
+export async function getIndexedUserTransactions(
+  userAddress: string,
+  limit: number = 50
+): Promise<Array<{
+  signature: string;
+  type: string;
+  pool_address: string;
+  amount_in?: string;
+  amount_out?: string;
+  block_time: string;
+}> | null> {
+  try {
+    const response = await fetch(`/api/users/${userAddress}/transactions?limit=${limit}`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (data.message === "Indexer not configured") return null;
+
+    return data.transactions || [];
+  } catch {
+    return null;
+  }
 }

@@ -11,3 +11,5 @@ export { usePoolTVL, usePoolStats, useAllPoolStats } from "./usePoolStats";
 export { useUserTransactionHistory, useProgramTransactions } from "./useTransactionHistory";
 export type { TransactionRecord } from "./useTransactionHistory";
 export { useCreatePool } from "./useCreatePool";
+export { useGlobalStats } from "./useGlobalStats";
+export type { GlobalStats } from "./useGlobalStats";

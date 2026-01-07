@@ -13,8 +13,24 @@ interface TokenSelectModalProps {
   excludeToken?: PublicKey;
 }
 
-// Sample tokens for demonstration
-const SAMPLE_TOKENS: TokenInfo[] = [
+// Devnet test tokens
+const DEVNET_TOKENS: TokenInfo[] = [
+  {
+    mint: new PublicKey("2eJCUAkzXv5gAxQaWUk1u7kK4oG7XZ3jB6RrL9xc1buQ"),
+    symbol: "sUSDC",
+    name: "Suniswap USDC (Test)",
+    decimals: 6,
+  },
+  {
+    mint: new PublicKey("GdLm7VEXzHZyUQDL8r2TgvTMDSN44wjcrZbu4dme4mue"),
+    symbol: "SUNI",
+    name: "Suniswap Token (Test)",
+    decimals: 9,
+  },
+];
+
+// Mainnet tokens for demonstration
+const MAINNET_TOKENS: TokenInfo[] = [
   {
     mint: new PublicKey("So11111111111111111111111111111111111111112"),
     symbol: "SOL",
@@ -37,6 +53,11 @@ const SAMPLE_TOKENS: TokenInfo[] = [
     logo: "/tokens/usdt.svg",
   },
 ];
+
+// Use devnet tokens when on devnet
+const SAMPLE_TOKENS: TokenInfo[] = process.env.NEXT_PUBLIC_NETWORK === "devnet"
+  ? DEVNET_TOKENS
+  : MAINNET_TOKENS;
 
 export const TokenSelectModal: FC<TokenSelectModalProps> = ({
   isOpen,

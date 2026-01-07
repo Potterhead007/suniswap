@@ -6,12 +6,6 @@ import {
   WalletProvider,
 } from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import {
-  PhantomWalletAdapter,
-  SolflareWalletAdapter,
-  TorusWalletAdapter,
-  LedgerWalletAdapter,
-} from "@solana/wallet-adapter-wallets";
 import { WalletError } from "@solana/wallet-adapter-base";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NETWORKS, NetworkName } from "@/lib/constants";
@@ -45,15 +39,9 @@ export const Providers: FC<ProvidersProps> = ({ children }) => {
 
   const endpoint = useMemo(() => NETWORKS[network].endpoint, [network]);
 
-  const wallets = useMemo(
-    () => [
-      new PhantomWalletAdapter(),
-      new SolflareWalletAdapter(),
-      new TorusWalletAdapter(),
-      new LedgerWalletAdapter(),
-    ],
-    []
-  );
+  // Empty array = auto-detect wallets using Wallet Standard
+  // Modern wallets (Phantom, Solflare, etc.) register themselves automatically
+  const wallets = useMemo(() => [], []);
 
   const onError = useCallback((error: WalletError) => {
     console.error("Wallet error:", error);
