@@ -480,62 +480,73 @@ fn find_next_initialized_tick<'a>(
     tick_spacing: u16,
     zero_for_one: bool,
 ) -> Result<(i32, bool)> {
-    // Try tick_array_0 first
-    {
-        let array = tick_array_0.load()?;
-        if array.is_tick_in_array(current_tick, tick_spacing) {
-            let (next_tick, initialized) = array.next_initialized_tick(
-                current_tick,
-                tick_spacing,
-                zero_for_one,
-            )?;
-            if initialized {
-                return Ok((next_tick, true));
-            }
-            return Ok((next_tick, false));
-        }
-    }
+    // Search for next initialized tick across all provided tick arrays.
+    // For zero_for_one (going left): search in the array containing current tick first,
+    // then continue to arrays to the left.
+    // For !zero_for_one (going right): search from current tick's array, then arrays to the right.
 
-    // Try tick_array_1
-    {
-        let array = tick_array_1.load()?;
-        if array.is_tick_in_array(current_tick, tick_spacing) {
-            let (next_tick, initialized) = array.next_initialized_tick(
-                current_tick,
-                tick_spacing,
-                zero_for_one,
-            )?;
-            if initialized {
-                return Ok((next_tick, true));
-            }
-            return Ok((next_tick, false));
-        }
-    }
+    let ticks_per_array = (crate::constants::TICK_ARRAY_SIZE as i32) * (tick_spacing as i32);
 
-    // Try tick_array_2
-    {
-        let array = tick_array_2.load()?;
-        if array.is_tick_in_array(current_tick, tick_spacing) {
-            let (next_tick, initialized) = array.next_initialized_tick(
-                current_tick,
-                tick_spacing,
-                zero_for_one,
-            )?;
-            if initialized {
-                return Ok((next_tick, true));
-            }
-            return Ok((next_tick, false));
-        }
-    }
-
-    // If tick not in any array, use the first array's boundary
-    let array = tick_array_0.load()?;
-    let boundary = if zero_for_one {
-        array.start_tick_index
+    // Collect tick arrays in order for the search direction
+    let arrays = if zero_for_one {
+        // For going left, we want arrays in descending order of start_tick_index
+        [tick_array_0, tick_array_1, tick_array_2]
     } else {
-        array.start_tick_index + (crate::constants::TICK_ARRAY_SIZE as i32 - 1) * (tick_spacing as i32)
+        // For going right, we want arrays in ascending order of start_tick_index
+        [tick_array_0, tick_array_1, tick_array_2]
     };
 
+    let mut boundary = current_tick;
+
+    for array_loader in arrays.iter() {
+        let array = array_loader.load()?;
+
+        // For zero_for_one: check if this array could contain ticks to the left of current
+        // For !zero_for_one: check if this array could contain ticks to the right of current
+        let array_end = array.start_tick_index + ticks_per_array;
+
+        let should_search = if zero_for_one {
+            // Search if array covers ticks <= current_tick
+            array.start_tick_index <= current_tick
+        } else {
+            // Search if array covers ticks >= current_tick
+            array_end > current_tick
+        };
+
+        if !should_search {
+            continue;
+        }
+
+        // Determine the search start tick within this array
+        let search_from = if zero_for_one {
+            // Start from current_tick or array end (whichever is smaller)
+            current_tick.min(array_end - tick_spacing as i32)
+        } else {
+            // Start from current_tick or array start (whichever is larger)
+            current_tick.max(array.start_tick_index)
+        };
+
+        if array.is_tick_in_array(search_from, tick_spacing) {
+            let (next_tick, initialized) = array.next_initialized_tick(
+                search_from,
+                tick_spacing,
+                zero_for_one,
+            )?;
+
+            if initialized {
+                return Ok((next_tick, true));
+            }
+
+            // Update boundary to this array's boundary
+            boundary = if zero_for_one {
+                array.start_tick_index
+            } else {
+                array_end - tick_spacing as i32
+            };
+        }
+    }
+
+    // No initialized tick found in any array, return boundary
     Ok((boundary, false))
 }
 

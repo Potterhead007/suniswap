@@ -40,20 +40,25 @@ pub fn get_amount_a_delta(
         (sqrt_price_b_x64, sqrt_price_a_x64)
     };
 
-    let numerator = liquidity
-        .checked_mul(sqrt_price_upper - sqrt_price_lower)
-        .ok_or(SuniswapError::MathOverflow)?;
+    // Formula: amount_a = L * Q64 * (sp_upper - sp_lower) / (sp_upper * sp_lower)
+    //
+    // Since sp_upper * sp_lower overflows u128 (~2^64 * 2^64 = 2^128), we split into two steps:
+    // step1 = L * (sp_upper - sp_lower) / sp_upper
+    // step2 = step1 * Q64 / sp_lower
+    //
+    // This gives: L * (sp_upper - sp_lower) * Q64 / (sp_upper * sp_lower)
+    let diff = sqrt_price_upper - sqrt_price_lower;
 
-    let denominator = sqrt_price_upper
-        .checked_mul(sqrt_price_lower)
-        .ok_or(SuniswapError::MathOverflow)?
-        .checked_div(Q64)
-        .ok_or(SuniswapError::DivisionByZero)?;
+    let intermediate = if round_up {
+        mul_div_round_up(liquidity, diff, sqrt_price_upper)?
+    } else {
+        mul_div(liquidity, diff, sqrt_price_upper)?
+    };
 
     let result = if round_up {
-        mul_div_round_up(numerator, Q64, denominator)?
+        mul_div_round_up(intermediate, Q64, sqrt_price_lower)?
     } else {
-        mul_div(numerator, Q64, denominator)?
+        mul_div(intermediate, Q64, sqrt_price_lower)?
     };
 
     if result > u64::MAX as u128 {
@@ -112,17 +117,14 @@ pub fn get_liquidity_for_amount_a(
         (sqrt_price_b_x64, sqrt_price_a_x64)
     };
 
-    let intermediate = sqrt_price_lower
-        .checked_mul(sqrt_price_upper)
-        .ok_or(SuniswapError::MathOverflow)?
-        .checked_div(Q64)
-        .ok_or(SuniswapError::DivisionByZero)?;
-
-    mul_div(
-        amount_a as u128,
-        intermediate,
-        sqrt_price_upper - sqrt_price_lower,
-    )
+    // Formula: L = amount_a * sp_upper * sp_lower / (Q64 * (sp_upper - sp_lower))
+    //
+    // Since sp_upper * sp_lower overflows u128, we split into two steps:
+    // step1 = amount_a * sp_upper / (sp_upper - sp_lower)
+    // step2 = step1 * sp_lower / Q64
+    let diff = sqrt_price_upper - sqrt_price_lower;
+    let intermediate = mul_div(amount_a as u128, sqrt_price_upper, diff)?;
+    mul_div(intermediate, sqrt_price_lower, Q64)
 }
 
 /// Calculate the liquidity amount for a given amount of token B

@@ -30,7 +30,7 @@ pub mod utils;
 
 use instructions::*;
 
-declare_id!("859DmKSfDQxnHY7dbYdFNwUE7QWhnb1WiBbXwbq1ktky");
+declare_id!("D3mEetFkLuB1sia8Bvvv2nmt9k6RsJPAGR2PE6tj7EFq");
 
 #[program]
 pub mod suniswap {
@@ -197,7 +197,7 @@ mod test {
         // Verify program ID matches
         assert_eq!(
             ID.to_string(),
-            "859DmKSfDQxnHY7dbYdFNwUE7QWhnb1WiBbXwbq1ktky"
+            "D3mEetFkLuB1sia8Bvvv2nmt9k6RsJPAGR2PE6tj7EFq"
         );
     }
 }

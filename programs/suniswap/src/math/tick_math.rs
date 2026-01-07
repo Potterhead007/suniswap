@@ -10,6 +10,161 @@ use crate::constants::{MIN_TICK, MAX_TICK, MIN_SQRT_PRICE_X64, MAX_SQRT_PRICE_X6
 use crate::errors::SuniswapError;
 use anchor_lang::prelude::*;
 
+/// Compute 2^192 / divisor using the formula:
+/// 2^192 / d = 2^64 * (2^128 / d)
+///
+/// Since 2^128 doesn't fit in u128, we compute:
+/// 2^128 / d = ((2^64 * 2^64) / d)
+///           = (2^64 / d) * 2^64 + ((2^64 % d) * 2^64) / d
+///           ≈ 2^64 / d * 2^64  (when d > 2^64)
+///
+/// For better accuracy, we use:
+/// 2^192 / d = (q * d + r) / d where q = initial estimate
+///
+/// Returns the result as u128 (which fits for our use case where divisor < 2^128)
+fn div_2_192_by_u128(divisor: u128) -> u128 {
+    if divisor == 0 {
+        return u128::MAX;
+    }
+
+    // Check if divisor's high 64 bits are zero - result would overflow u128
+    let d_hi = divisor >> 64;
+    if d_hi == 0 {
+        return u128::MAX;
+    }
+
+    // For divisor close to 2^128, the result is close to 2^64
+    //
+    // We use: 2^192 / d = 2^64 * (2^128 / d)
+    //
+    // Since divisor ≈ 2^128, we have 2^128 / divisor ≈ 1
+    // More precisely: 2^128 / divisor = 1 + (2^128 - divisor) / divisor
+    //               = 1 + (2^128 - divisor) / divisor
+    //
+    // But 2^128 doesn't fit in u128. However:
+    // 2^128 = (u128::MAX + 1), so 2^128 - divisor = u128::MAX + 1 - divisor
+    //
+    // For divisor < 2^128, this is: (u128::MAX - divisor) + 1
+    // = u128::MAX - divisor + 1 (but this could overflow if divisor is small)
+    //
+    // Better approach: compute 2^192 / divisor directly using 256/128 division
+
+    // Algorithm: schoolbook division
+    // N = 2^192, D = divisor
+    // N = Q * D + R where Q is quotient and R is remainder
+    //
+    // We compute Q = floor(N / D) using the following:
+    // Since N = 2^192 and D is 128-bit, Q is at most 192 - 127 = 65 bits
+    // (when D is at its minimum value for having high 64 bits set, i.e., D = 2^64)
+    //
+    // For our use case, D is close to 2^128, so Q is close to 2^64
+
+    // Direct computation using u128 arithmetic and careful handling:
+    //
+    // Let D = d_hi * 2^64 + d_lo where d_hi and d_lo are the high and low 64-bit halves
+    // We know d_hi > 0 (checked above)
+    //
+    // 2^192 / D ≈ 2^192 / (d_hi * 2^64) = 2^128 / d_hi
+    //
+    // This gives a first approximation. Let's compute:
+    // q_est = 2^128 / d_hi = (u128::MAX / d_hi) + 1 (approximately)
+
+    // Note: We could use approximation 2^128/d_hi for initial estimate,
+    // but the bit-by-bit algorithm below is guaranteed correct
+
+    // Now we need to refine this estimate
+    // 2^192 / divisor = 2^64 * (2^128 / divisor)
+    //
+    // Our estimate is q_approx ≈ 2^128 / d_hi
+    // The true value is 2^128 / divisor < 2^128 / d_hi (since divisor >= d_hi * 2^64)
+    //
+    // More precisely: 2^128 / divisor = (2^128 / d_hi) * (d_hi / divisor) * (divisor / divisor)
+    // Hmm, this is getting complicated.
+    //
+    // Simpler approach: use Newton-Raphson or binary search
+
+    // For speed, use the approximation and add correction
+    // q_approx * d_hi ≈ 2^128, so q_approx * divisor ≈ 2^128 * (divisor / d_hi) = 2^128 * (1 + d_lo / (d_hi * 2^64))
+    //
+    // Actually, let me just use bit-by-bit computation for correctness
+
+    // Bit-by-bit schoolbook division:
+    // Process N = 2^192 bit by bit from MSB (bit 192) to LSB (bit 0)
+    // Since we want quotient bits 0-127, we process 193 bits of N
+    //
+    // But N = 2^192 has only bit 192 set, so most bits are 0
+
+    // The quotient Q = floor(2^192 / D) where D ≈ 2^128 is approximately 2^64
+    // Q has at most 65 bits (since 2^192 / 2^127 = 2^65)
+
+    // Use the recurrence: at step i, R_i = 2^(192-i) mod D
+    // Q_i = 2^(192-i) / D = Q_{i-1} * 2 + (if R_{i-1} * 2 >= D then 1 else 0)
+
+    // Starting from i=0: R_0 = 2^192 mod D, Q_0 = floor(2^192 / D)
+    // We build this up iteratively
+
+    let mut quotient: u128 = 0;
+    let mut remainder_hi: u128 = 0; // high 128 bits of 256-bit remainder
+    let mut remainder_lo: u128 = 0; // low 128 bits of 256-bit remainder
+
+    // Standard restoring division algorithm:
+    // We're computing floor(2^192 / divisor)
+    // N = 2^192 has only bit 192 set
+    // We process bits from MSB to LSB
+    //
+    // The quotient has at most 65 bits since divisor > 2^127
+
+    for bit_pos in (0u32..193).rev() {
+        // Shift remainder left by 1
+        let carry = remainder_hi >> 127;
+        remainder_hi = (remainder_hi << 1) | (remainder_lo >> 127);
+        remainder_lo = remainder_lo << 1;
+
+        // Add the numerator bit at this position
+        // N = 2^192, so only bit 192 is set
+        if bit_pos == 192 {
+            remainder_lo |= 1;
+        }
+
+        // Shift quotient left by 1 (to make room for new bit)
+        // But we only start recording once bit_pos < 128
+        if bit_pos < 128 {
+            quotient <<= 1;
+        }
+
+        // Check if remainder >= divisor
+        // remainder is (remainder_hi * 2^128 + remainder_lo)
+        // divisor is 128-bit, so remainder >= divisor iff:
+        // - carry > 0 (remainder overflowed 256 bits), OR
+        // - remainder_hi > 0, OR
+        // - remainder_hi == 0 AND remainder_lo >= divisor
+        let can_subtract = if carry > 0 {
+            true
+        } else if remainder_hi > 0 {
+            true
+        } else {
+            remainder_lo >= divisor
+        };
+
+        if can_subtract {
+            // Subtract divisor from remainder
+            if remainder_lo >= divisor {
+                remainder_lo -= divisor;
+            } else {
+                remainder_hi -= 1;
+                remainder_lo = remainder_lo.wrapping_sub(divisor);
+            }
+
+            // Set quotient bit (only if bit_pos < 128)
+            if bit_pos < 128 {
+                quotient |= 1;
+            }
+        }
+    }
+
+    quotient
+}
+
 /// Get sqrt price at a given tick
 /// sqrt_price_x64 = sqrt(1.0001^tick) * 2^64
 ///
@@ -92,12 +247,20 @@ pub fn get_sqrt_price_at_tick(tick: i32) -> Result<u128> {
         ratio = mul_shift(ratio, 0x2216e584f5fa1ea926041bedfe98)?; // 1.0001^262144
     }
 
-    // If tick is negative, invert the ratio
+    // If tick is positive, invert the ratio
+    // The magic numbers compute 1/1.0001^|tick|, so for positive ticks we need to invert
+    // to get 1.0001^tick. For negative ticks, we want 1.0001^-|tick| = 1/1.0001^|tick|
+    // which is what the magic numbers give us directly.
+    //
+    // For positive ticks, we need to compute 2^192 / ratio to get the sqrt_price in Q64.64.
+    // The ratio is in Q128.128, so: (2^256 / ratio) >> 64 = 2^192 / ratio
     if tick > 0 {
-        ratio = u128::MAX / ratio;
+        let result = div_2_192_by_u128(ratio);
+        // Add rounding adjustment (saturating to prevent overflow at bounds)
+        return Ok(result.saturating_add(1));
     }
 
-    // Convert from Q128.128 to Q64.64
+    // For negative or zero tick: convert from Q128.128 to Q64.64
     // We need to shift right by 64 bits
     Ok((ratio >> 64) + if ratio % (1u128 << 64) > 0 { 1 } else { 0 })
 }
@@ -262,5 +425,38 @@ mod tests {
         assert!(is_valid_tick(60, 60));
         assert!(is_valid_tick(-60, 60));
         assert!(!is_valid_tick(61, 60));
+    }
+
+    #[test]
+    fn test_sqrt_prices_at_various_ticks() {
+        let q64: u128 = 1 << 64;
+
+        // Tick 0: sqrt_price should be ~2^64 (price = 1.0)
+        let sp_0 = get_sqrt_price_at_tick(0).unwrap();
+        assert!((sp_0 as f64 / q64 as f64 - 1.0).abs() < 0.001);
+
+        // Tick -200: sqrt_price should be < 2^64
+        let sp_neg200 = get_sqrt_price_at_tick(-200).unwrap();
+        assert!(sp_neg200 < q64, "Tick -200 should have sqrt_price < Q64");
+
+        // Tick 200: sqrt_price should be > 2^64
+        let sp_200 = get_sqrt_price_at_tick(200).unwrap();
+        assert!(sp_200 > q64, "Tick 200 should have sqrt_price > Q64");
+
+        // Check monotonicity: higher tick = higher price
+        assert!(sp_neg200 < sp_0);
+        assert!(sp_0 < sp_200);
+
+        // Verify reasonable magnitudes
+        // tick = log_1.0001(price^2) => price = 1.0001^(tick/2)
+        // At tick 200: price = 1.0001^100 ≈ 1.01005
+        // sqrt_price = sqrt(1.01005) ≈ 1.005
+        let ratio_200 = sp_200 as f64 / q64 as f64;
+        assert!((ratio_200 - 1.01).abs() < 0.01);
+
+        // At tick -200: price = 1.0001^-100 ≈ 0.99005
+        // sqrt_price = sqrt(0.99005) ≈ 0.995
+        let ratio_neg200 = sp_neg200 as f64 / q64 as f64;
+        assert!((ratio_neg200 - 0.99).abs() < 0.01);
     }
 }
